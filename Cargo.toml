@@ -1,0 +1,38 @@
+[package]
+name = "sshpass"
+version = "0.1.0"
+edition = "2021"
+authors = ["sshpass-rs contributors"]
+license = "GPL-2.0-only"
+description = "A Rust implementation of sshpass - noninteractive ssh password provider"
+repository = "https://github.com/your-org/sshpass"
+homepage = "https://github.com/your-org/sshpass"
+documentation = "https://docs.rs/sshpass"
+readme = "README.md"
+keywords = ["ssh", "password", "automation", "security", "pty"]
+categories = ["command-line-utilities", "authentication"]
+rust-version = "1.70"
+
+[dependencies]
+clap = { version = "4", features = ["derive"] }
+nix = { version = "0.27", features = ["process", "signal", "ioctl", "term", "fs", "poll"] }
+thiserror = "1.0"
+anyhow = "1.0"
+zeroize = { version = "1.7", features = ["derive"] }
+libc = "0.2"
+signal-hook = "0.3"
+
+[target.'cfg(unix)'.dependencies]
+# Unix-specific dependencies are already included above
+
+[target.'cfg(windows)'.dependencies]
+# Windows is not supported due to lack of PTY support
+
+[[bin]]
+name = "sshpass"
+path = "src/main.rs"
+required-features = []
+
+[lib]
+name = "sshpass"
+path = "src/lib.rs"

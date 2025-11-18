@@ -1,0 +1,58 @@
+# Rust
+/target/
+**/*.rs.bk
+*.pdb
+Cargo.lock
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Environment
+.env
+.env.local
+
+# Passwords and sensitive files
+*password*
+*_password
+*.password
+.ssh/id_*
+.ssh/known_hosts
+
+# Logs
+*.log
+/logs/
+
+# Temporary files
+/tmp/
+*.tmp
+
+# Test artifacts
+/test-results/
+/coverage/
+
+# Documentation builds
+/doc/
+
+# OS
+Thumbs.db
+.Spotlight-V100
+.Trashes
+
+# Backup files
+*.bak
+*~
+
+# Build artifacts
+*.o
+*.so
+*.dylib
+*.dll
+*.exe
+
+sshpass-1.10*
+test.sh
