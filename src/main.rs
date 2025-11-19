@@ -30,8 +30,13 @@ fn main() {
 }
 
 fn run() -> i32 {
+    let raw_args = std::env::args_os().collect::<Vec<_>>();
+
     // Parse command line arguments
-    let args = Cli::parse_args();
+    let mut args = Cli::parse_args();
+
+    // Allow "-ppassword" inline form (unless user forced command parsing via "--")
+    absorb_inline_password_arg(&mut args, &raw_args);
 
     // Validate arguments
     if let Err(e) = args.validate() {
@@ -96,6 +101,103 @@ fn get_password_source(args: &Cli) -> PasswordSource {
     }
 }
 
+/// Detect and consume "-ppassword" inline values that clap treated as part of the command.
+fn absorb_inline_password_arg(args: &mut Cli, raw_args: &[std::ffi::OsString]) {
+    if args.password.is_some() || args.command.is_empty() {
+        return;
+    }
+
+    if let Some(password) = inline_password_from_command(&args.command, raw_args) {
+        args.password = Some(password);
+        args.command.remove(0);
+    }
+}
+
+/// Determine whether the first command argument encodes "-ppassword".
+fn inline_password_from_command(
+    command_args: &[String],
+    raw_args: &[std::ffi::OsString],
+) -> Option<String> {
+    let first = command_args.first()?;
+    let password = parse_inline_password_token(first)?;
+
+    if inline_arg_after_double_dash(first, raw_args) {
+        return None;
+    }
+
+    Some(password)
+}
+
+/// Extract the password from an inline "-ppassword" or "-p=password" token.
+fn parse_inline_password_token(token: &str) -> Option<String> {
+    let rest = token.strip_prefix("-p")?;
+    let rest = rest.strip_prefix('=').unwrap_or(rest);
+    if rest.is_empty() {
+        return None;
+    }
+    Some(rest.to_string())
+}
+
+/// Check whether the token appeared after "--", meaning it belongs to the target command.
+fn inline_arg_after_double_dash(candidate: &str, raw_args: &[std::ffi::OsString]) -> bool {
+    let candidate_os = std::ffi::OsStr::new(candidate);
+    let mut after_double_dash = false;
+
+    for arg in raw_args.iter().skip(1) {
+        if arg == "--" {
+            after_double_dash = true;
+            continue;
+        }
+        if arg == candidate_os {
+            return after_double_dash;
+        }
+    }
+
+    false
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn os_args(args: &[&str]) -> Vec<std::ffi::OsString> {
+        args.iter().map(|s| std::ffi::OsString::from(s)).collect()
+    }
+
+    #[test]
+    fn detects_inline_password_before_command() {
+        let command = vec!["-ppassword".to_string(), "ssh".to_string()];
+        let raw = os_args(&["sshpass", "-ppassword", "ssh", "example.com"]);
+        assert_eq!(
+            inline_password_from_command(&command, &raw),
+            Some("password".to_string())
+        );
+    }
+
+    #[test]
+    fn ignores_inline_password_after_double_dash() {
+        let command = vec!["-ppassword".to_string(), "echo".to_string()];
+        let raw = os_args(&["sshpass", "--", "-ppassword", "echo", "ok"]);
+        assert_eq!(inline_password_from_command(&command, &raw), None);
+    }
+
+    #[test]
+    fn parses_inline_password_with_equals() {
+        let command = vec!["-p=secret".to_string(), "ssh".to_string()];
+        let raw = os_args(&["sshpass", "-p=secret", "ssh", "example.com"]);
+        assert_eq!(
+            inline_password_from_command(&command, &raw),
+            Some("secret".to_string())
+        );
+    }
+
+    #[test]
+    fn returns_none_when_first_command_arg_not_password() {
+        let command = vec!["ssh".to_string(), "-p2222".to_string()];
+        let raw = os_args(&["sshpass", "ssh", "-p2222", "example.com"]);
+        assert_eq!(inline_password_from_command(&command, &raw), None);
+    }
+}
 /// Read the password from the configured source
 fn read_password(args: &Cli, source: PasswordSource) -> Result<SecureString> {
     // Special handling for environment variables
