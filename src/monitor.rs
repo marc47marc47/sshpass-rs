@@ -49,8 +49,21 @@ impl Matcher {
     }
 
     /// Check if the matcher has completed matching
+    #[allow(dead_code)]
     pub fn is_complete(&self) -> bool {
         self.state == self.reference.len()
+    }
+
+    /// Get the current matching state (for debugging)
+    #[allow(dead_code)]
+    pub fn current_state(&self) -> usize {
+        self.state
+    }
+
+    /// Get the reference pattern being matched
+    #[allow(dead_code)]
+    pub fn pattern(&self) -> &str {
+        &self.reference
     }
 }
 
@@ -74,6 +87,7 @@ pub struct OutputMonitor {
     password_matcher: Matcher,
     host_auth_matcher: Matcher,
     host_key_changed_matcher: Matcher,
+    ansi_filter: crate::ansi::AnsiFilter,
     password_sent: bool,
     verbose: bool,
     first_output: bool,
@@ -99,6 +113,7 @@ impl OutputMonitor {
             password_matcher: Matcher::new(password_prompt),
             host_auth_matcher: Matcher::new("The authenticity of host "),
             host_key_changed_matcher: Matcher::new("differs from the key for the IP address"),
+            ansi_filter: crate::ansi::AnsiFilter::new(),
             password_sent: false,
             verbose,
             first_output: true,
@@ -113,21 +128,59 @@ impl OutputMonitor {
     /// # Returns
     /// MonitorResult indicating what action should be taken
     pub fn handle_output(&mut self, data: &[u8]) -> MonitorResult {
+        // Filter ANSI escape sequences and normalize line endings
+        let filtered_data = self.ansi_filter.process(data);
+
         if self.verbose {
             if self.first_output {
                 self.first_output = false;
             }
-            // Print the data for debugging
+            // Print the raw data for debugging
             if let Ok(s) = std::str::from_utf8(data) {
                 eprint!("SSHPASS: read: {}", s);
             }
+            // Also show filtered data if different
+            if filtered_data != data {
+                if let Ok(filtered_s) = std::str::from_utf8(&filtered_data) {
+                    eprintln!();
+                    eprintln!("SSHPASS: (filtered): {}", filtered_s);
+                }
+            }
         }
 
+        // Store matcher state before feeding
+        let prev_state = self.password_matcher.current_state();
+
         // Check for password prompt
-        if self.password_matcher.feed(data) {
+        let matched = self.password_matcher.feed(&filtered_data);
+
+        // Show matching progress in verbose mode
+        if self.verbose && !matched {
+            let new_state = self.password_matcher.current_state();
+            if new_state > 0 && new_state != prev_state {
+                eprintln!();
+                eprintln!(
+                    "SSHPASS: Partial match: {}/{} chars of '{}'",
+                    new_state,
+                    self.password_matcher.pattern().len(),
+                    self.password_matcher.pattern()
+                );
+            }
+        }
+
+        if matched {
             if !self.password_sent {
                 if self.verbose {
-                    eprintln!("SSHPASS: detected prompt. Sending password.");
+                    eprintln!();
+                    eprintln!("SSHPASS: *** Password prompt detected! ***");
+                    eprintln!(
+                        "SSHPASS: Matched pattern: '{}'",
+                        self.password_matcher.pattern()
+                    );
+                    if let Ok(s) = std::str::from_utf8(&filtered_data) {
+                        eprintln!("SSHPASS: In data: {:?}", s);
+                    }
+                    eprintln!("SSHPASS: Sending password now...");
                 }
                 self.password_sent = true;
                 self.password_matcher.reset();
@@ -135,14 +188,17 @@ impl OutputMonitor {
             } else {
                 // Password prompt appeared again - wrong password
                 if self.verbose {
-                    eprintln!("SSHPASS: detected prompt, again. Wrong password. Terminating.");
+                    eprintln!();
+                    eprintln!("SSHPASS: *** Password prompt detected again! ***");
+                    eprintln!("SSHPASS: This indicates incorrect password.");
+                    eprintln!("SSHPASS: Terminating...");
                 }
                 return MonitorResult::IncorrectPassword;
             }
         }
 
         // Check for host authentication prompt
-        if self.host_auth_matcher.feed(data) {
+        if self.host_auth_matcher.feed(&filtered_data) {
             if self.verbose {
                 eprintln!("SSHPASS: detected host authentication prompt. Exiting.");
             }
@@ -150,7 +206,7 @@ impl OutputMonitor {
         }
 
         // Check for host key changed prompt
-        if self.host_key_changed_matcher.feed(data) {
+        if self.host_key_changed_matcher.feed(&filtered_data) {
             if self.verbose {
                 eprintln!("SSHPASS: detected host key changed prompt. Exiting.");
             }
@@ -161,6 +217,7 @@ impl OutputMonitor {
     }
 
     /// Check if password has been sent
+    #[allow(dead_code)]
     pub fn password_sent(&self) -> bool {
         self.password_sent
     }
@@ -219,7 +276,8 @@ mod tests {
     fn test_output_monitor_host_auth() {
         let mut monitor = OutputMonitor::new(None, false);
 
-        let result = monitor.handle_output(b"The authenticity of host 'example.com' can't be established.");
+        let result =
+            monitor.handle_output(b"The authenticity of host 'example.com' can't be established.");
         assert_eq!(result, MonitorResult::HostKeyUnknown);
     }
 
@@ -227,7 +285,8 @@ mod tests {
     fn test_output_monitor_host_key_changed() {
         let mut monitor = OutputMonitor::new(None, false);
 
-        let result = monitor.handle_output(b"WARNING: The key differs from the key for the IP address");
+        let result =
+            monitor.handle_output(b"WARNING: The key differs from the key for the IP address");
         assert_eq!(result, MonitorResult::HostKeyChanged);
     }
 }

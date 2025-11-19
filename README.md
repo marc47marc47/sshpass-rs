@@ -95,6 +95,13 @@ sshpass [選項] <命令> [命令參數...]
 echo "mypassword" | sshpass ssh user@example.com
 ```
 
+When no `-p/-f/-d/-e` flags are provided and stdin is attached to a terminal, sshpass now asks for the password interactively:
+
+```bash
+sshpass ssh user@example.com
+SSHPASS: Enter password:
+```
+
 ### 2. 從檔案讀取密碼
 
 ```bash

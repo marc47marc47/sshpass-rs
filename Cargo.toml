@@ -15,18 +15,26 @@ rust-version = "1.70"
 
 [dependencies]
 clap = { version = "4", features = ["derive"] }
-nix = { version = "0.27", features = ["process", "signal", "ioctl", "term", "fs", "poll"] }
 thiserror = "1.0"
 anyhow = "1.0"
 zeroize = { version = "1.7", features = ["derive"] }
+vte = "0.13"
+rpassword = "7"
+
+[target.'cfg(unix)'.dependencies]
+nix = { version = "0.27", features = ["process", "signal", "ioctl", "term", "fs", "poll"] }
 libc = "0.2"
 signal-hook = "0.3"
 
-[target.'cfg(unix)'.dependencies]
-# Unix-specific dependencies are already included above
-
 [target.'cfg(windows)'.dependencies]
-# Windows is not supported due to lack of PTY support
+portable-pty = "0.8"
+windows = { version = "0.52", features = [
+    "Win32_System_Console",
+    "Win32_System_Threading",
+    "Win32_System_IO",
+    "Win32_Foundation",
+    "Win32_Storage_FileSystem",
+] }
 
 [[bin]]
 name = "sshpass"

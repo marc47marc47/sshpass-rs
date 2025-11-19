@@ -1,4 +1,3 @@
-use std::fmt;
 use thiserror::Error;
 
 /// Return codes matching the original C version of sshpass
@@ -48,8 +47,13 @@ pub enum SshpassError {
     #[error("I/O error: {0}")]
     IoError(#[from] std::io::Error),
 
+    #[cfg(unix)]
     #[error("System error: {0}")]
     SystemError(#[from] nix::Error),
+
+    #[cfg(windows)]
+    #[error("Windows error: {0}")]
+    WindowsError(String),
 
     #[error("Environment variable not set: {0}")]
     EnvVarNotSet(String),
@@ -82,7 +86,10 @@ impl SshpassError {
             SshpassError::HostKeyUnknown => ReturnCode::HostKeyUnknown,
             SshpassError::HostKeyChanged => ReturnCode::HostKeyChanged,
             SshpassError::IoError(_) => ReturnCode::RuntimeError,
+            #[cfg(unix)]
             SshpassError::SystemError(_) => ReturnCode::RuntimeError,
+            #[cfg(windows)]
+            SshpassError::WindowsError(_) => ReturnCode::RuntimeError,
             SshpassError::EnvVarNotSet(_) => ReturnCode::InvalidArguments,
             SshpassError::PasswordFileError(_) => ReturnCode::RuntimeError,
             SshpassError::InvalidFileDescriptor(_) => ReturnCode::InvalidArguments,

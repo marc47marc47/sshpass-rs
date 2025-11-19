@@ -17,15 +17,31 @@ use std::path::PathBuf;
 )]
 pub struct Cli {
     /// Take password from file
-    #[arg(short = 'f', long = "file", value_name = "filename", group = "password_source")]
+    #[arg(
+        short = 'f',
+        long = "file",
+        value_name = "filename",
+        group = "password_source"
+    )]
     pub password_file: Option<PathBuf>,
 
-    /// Use number as file descriptor for getting password
-    #[arg(short = 'd', long = "fd", value_name = "number", group = "password_source")]
+    /// Use number as file descriptor for getting password (Unix only)
+    #[cfg(unix)]
+    #[arg(
+        short = 'd',
+        long = "fd",
+        value_name = "number",
+        group = "password_source"
+    )]
     pub password_fd: Option<i32>,
 
     /// Provide password as argument (security unwise)
-    #[arg(short = 'p', long = "password", value_name = "password", group = "password_source")]
+    #[arg(
+        short = 'p',
+        long = "password",
+        value_name = "password",
+        group = "password_source"
+    )]
     pub password: Option<String>,
 
     /// Password is passed as env-var "SSHPASS" or specified variable
@@ -70,10 +86,13 @@ impl Cli {
             ));
         }
 
-        // Validate file descriptor if provided
-        if let Some(fd) = self.password_fd {
-            if fd < 0 {
-                return Err(SshpassError::InvalidFileDescriptor(fd));
+        // Validate file descriptor if provided (Unix only)
+        #[cfg(unix)]
+        {
+            if let Some(fd) = self.password_fd {
+                if fd < 0 {
+                    return Err(SshpassError::InvalidFileDescriptor(fd));
+                }
             }
         }
 
@@ -103,11 +122,13 @@ impl Cli {
     }
 
     /// Get the verbosity level
+    #[allow(dead_code)]
     pub fn verbosity_level(&self) -> u8 {
         self.verbose
     }
 
     /// Get the password prompt to use (default: "assword")
+    #[allow(dead_code)]
     pub fn get_prompt(&self) -> &str {
         self.prompt.as_deref().unwrap_or("assword")
     }

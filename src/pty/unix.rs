@@ -1,3 +1,7 @@
+//! Unix PTY 實作
+//!
+//! 使用 POSIX PTY API 實作虛擬終端功能
+
 use crate::error::{Result, SshpassError};
 use nix::fcntl::{fcntl, FcntlArg, OFlag};
 use nix::pty::{grantpt, posix_openpt, ptsname, unlockpt, PtyMaster, Winsize};
@@ -24,9 +28,8 @@ impl Pty {
         })?;
 
         // Unlock the slave PTY
-        unlockpt(&master).map_err(|e| {
-            SshpassError::PtyCreationError(format!("Failed to unlock PTY: {}", e))
-        })?;
+        unlockpt(&master)
+            .map_err(|e| SshpassError::PtyCreationError(format!("Failed to unlock PTY: {}", e)))?;
 
         // Get the slave PTY name
         let slave_name = unsafe { ptsname(&master) }.map_err(|e| {
@@ -72,7 +75,7 @@ impl Pty {
 
         match read(self.master_fd(), buffer) {
             Ok(n) => Ok(n),
-            Err(nix::errno::Errno::EAGAIN) | Err(nix::errno::Errno::EWOULDBLOCK) => Ok(0),
+            Err(nix::errno::Errno::EAGAIN) => Ok(0),
             Err(e) => Err(SshpassError::SystemError(e)),
         }
     }

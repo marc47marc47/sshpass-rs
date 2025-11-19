@@ -1,3 +1,7 @@
+//! Unix 進程管理實作
+//!
+//! 使用 fork/exec 來產生子進程
+
 use crate::error::{Result, SshpassError};
 use crate::pty::Pty;
 use nix::fcntl::OFlag;
@@ -115,8 +119,7 @@ impl ChildProcess {
 
     /// Send a signal to the child process
     pub fn kill(&self, signal: nix::sys::signal::Signal) -> Result<()> {
-        nix::sys::signal::kill(self.pid, signal)
-            .map_err(|e| SshpassError::SystemError(e))
+        nix::sys::signal::kill(self.pid, signal).map_err(|e| SshpassError::SystemError(e))
     }
 }
 
@@ -140,9 +143,8 @@ fn run_child(pty: &Pty, command: &[String], verbose: bool) -> Result<()> {
         .map_err(|e| SshpassError::SystemError(e))?;
 
     // Create a new session (detach from current TTY)
-    setsid().map_err(|e| {
-        SshpassError::RuntimeError(format!("Failed to create new session: {}", e))
-    })?;
+    setsid()
+        .map_err(|e| SshpassError::RuntimeError(format!("Failed to create new session: {}", e)))?;
 
     // Open the slave PTY
     let slave = OpenOptions::new()
@@ -150,9 +152,7 @@ fn run_child(pty: &Pty, command: &[String], verbose: bool) -> Result<()> {
         .write(true)
         .custom_flags(OFlag::O_NOCTTY.bits())
         .open(pty.slave_name())
-        .map_err(|e| {
-            SshpassError::RuntimeError(format!("Failed to open slave PTY: {}", e))
-        })?;
+        .map_err(|e| SshpassError::RuntimeError(format!("Failed to open slave PTY: {}", e)))?;
 
     let slave_fd = slave.as_raw_fd();
 
@@ -170,7 +170,10 @@ fn run_child(pty: &Pty, command: &[String], verbose: bool) -> Result<()> {
     drop(slave);
 
     if verbose {
-        eprintln!("SSHPASS: Child process set up PTY, executing: {:?}", command);
+        eprintln!(
+            "SSHPASS: Child process set up PTY, executing: {:?}",
+            command
+        );
     }
 
     // Prepare arguments for execvp
@@ -186,9 +189,8 @@ fn run_child(pty: &Pty, command: &[String], verbose: bool) -> Result<()> {
     let c_strings = c_strings?;
 
     // Execute the command (this replaces the current process)
-    execvp(&c_strings[0], &c_strings).map_err(|e| {
-        SshpassError::ExecError(format!("Failed to execute command: {}", e))
-    })?;
+    execvp(&c_strings[0], &c_strings)
+        .map_err(|e| SshpassError::ExecError(format!("Failed to execute command: {}", e)))?;
 
     // If execvp returns, it's an error
     unreachable!("execvp should not return on success");
